@@ -1,0 +1,3 @@
+1. Open Main.py in vs code (optional)
+2. Open cmd or terminal
+3. Write streamlit run file_directory\Main.py
