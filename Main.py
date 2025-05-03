@@ -92,8 +92,43 @@ set_bg_with_overlay(image_pathh)
 df_plots = pd.read_csv(csv_path)
 df_model = pd.read_csv(csv_path)
 
-GENAI_API_KEY = "AIzaSyBDgqs533hwXnd_JszMrAPRI_hZ16jVNp4" 
-genai.configure(api_key=GENAI_API_KEY)
+if 'api_key_valid' not in st.session_state:
+    st.session_state.api_key_valid = False
+
+# Loop until valid API key is entered
+if not st.session_state.api_key_valid:
+    st.sidebar.header("🔐 API Key Setup")
+    user_api_key = st.sidebar.text_input("Enter your Gemini API Key", type="password")
+
+    if user_api_key:
+        try:
+            genai.configure(api_key=user_api_key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            _ = model.generate_content("Test")  # Dummy request
+
+            # If successful
+            st.session_state.api_key_valid = True
+            st.success("API key is valid!")
+
+            # Hide sidebar after success
+            hide_sidebar = """
+            <style>
+                [data-testid="stSidebar"] {
+                    display: none;
+                }
+                [data-testid="collapsedControl"] {
+                    display: none;
+                }
+            </style>
+            """
+            st.markdown(hide_sidebar, unsafe_allow_html=True)
+
+        except Exception:
+            st.sidebar.error("Invalid API key. Please enter a valid key.")
+            st.stop()
+    else:
+        st.warning("Please enter your Gemini API key to proceed.")
+        st.stop()
 
 graph_type = ['Bar Graph', 'Scatter plot', 'Box Plot', 'Line Chart']
 
