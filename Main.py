@@ -5,19 +5,23 @@ import seaborn as sb
 import streamlit as st
 import altair as alt
 import plotly.graph_objects as go
-import google.generativeai as genai
+from google import genai  
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 import base64
 from pathlib import Path
+import os                                                   # <<< NEW
+from dotenv import load_dotenv                              # <<< NEW (pip install python-dotenv)
+load_dotenv() 
 
 BASE_DIR = Path(__file__).resolve().parent
 csv_path = BASE_DIR / "crop_yield_short.csv"
 image_pathh = BASE_DIR / "background2.jpg"
 text_path = BASE_DIR / "crop_yield_shorter.txt"
+MODEL_NAME = "gemini-3.6-flash" 
 
-st.set_page_config(page_title="Yield Wizzard 3000", layout="centered")
+st.set_page_config(page_title="Yield Wizzard 3000", layout="wide")
 
 def set_bg_with_overlay(image_path):
     with open(image_path, "rb") as image_file:
@@ -77,6 +81,7 @@ def set_bg_with_overlay(image_path):
         background-color: #4a8fe7 !important;
         color: white !important;
         box-shadow: 0 4px 8px rgba(74, 143, 231, 0.3);
+        border-radius: 8px !important;
     }}
     
     /* Remove the bottom border line */
@@ -95,6 +100,17 @@ df_model = pd.read_csv(csv_path)
 if 'api_key_valid' not in st.session_state:
     st.session_state.api_key_valid = False
 
+def get_env_key():                                                      
+    try:                                                                
+        return st.secrets["GEMINI_API_KEY"]                             
+    except Exception:                                                   
+        return os.getenv("GEMINI_API_KEY")                              
+
+env_key = get_env_key()                                                 
+if env_key and not st.session_state.api_key_valid:                      
+    st.session_state.client = genai.Client(api_key=env_key)             
+    st.session_state.api_key_valid = True                               
+
 # Loop until valid API key is entered
 if not st.session_state.api_key_valid:
     st.sidebar.header("🔐 API Key Setup")
@@ -102,9 +118,9 @@ if not st.session_state.api_key_valid:
 
     if user_api_key:
         try:
-            genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            _ = model.generate_content("Test")  # Dummy request
+            client = genai.Client(api_key=user_api_key) 
+            _ = client.models.generate_content(model=MODEL_NAME, contents="Test") 
+            st.session_state.client = client
 
             # If successful
             st.session_state.api_key_valid = True
@@ -123,8 +139,8 @@ if not st.session_state.api_key_valid:
             """
             st.markdown(hide_sidebar, unsafe_allow_html=True)
 
-        except Exception:
-            st.sidebar.error("Invalid API key. Please enter a valid key.")
+        except Exception as e:
+            st.sidebar.error(f"Could not validate the key/model: {e}")
             st.stop()
     else:
         st.warning("Please enter your Gemini API key to proceed.")
@@ -175,7 +191,7 @@ def make_graph(typ):
 st.markdown(f'<div class="title">Yield Wizzard 3000</div>', unsafe_allow_html=True)
 
 # Create centered tabs
-col1, col2, col3 = st.columns([1,2,1])
+col1, col2, col3 = st.columns([1,8,1])
 with col2:
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Data Frame", "Graph Options", "Summary and Stats", "Model Training", "About developers"])
 
@@ -258,12 +274,16 @@ with col2:
                     file_text = f.read()
 
                 combined_prompt = final_prompt + "\n\n\U0001F4C4 Dataset Snapshot:\n" + file_text
+                try:
+                    response = st.session_state.client.models.generate_content(          
+                            model=MODEL_NAME,                                                
+                            contents=combined_prompt,                                        
+                        )
 
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(combined_prompt)
-
-                st.subheader("\U0001F4CB AI Analysis Output")
-                st.write(response.text)
+                    st.subheader("\U0001F4CB AI Analysis Output")
+                    st.write(response.text)
+                except Exception as e:                                                  
+                    st.error(f"Wizzi could not generate an analysis: {e}")
 
 df_model['Region']= df_model['Region'].replace({'North':1.0, 'South':2.0, 'East':3.0, 'West':4.0})
 df_model['Soil_Type']= df_model['Soil_Type'].replace({'Sandy':1.0, 'Clay':2.0, 'Loam':3.0, 'Silt':4.0, 'Peaty':5.0, 'Chalky':6.0})
